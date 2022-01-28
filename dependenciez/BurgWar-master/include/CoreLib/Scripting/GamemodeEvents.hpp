@@ -1,0 +1,78 @@
+// Copyright (C) 2020 Jérôme Leclercq
+// This file is part of the "Burgwar" project
+// For conditions of distribution and use, see copyright notice in LICENSE
+
+#pragma once
+
+#ifndef BURGWAR_CORELIB_SCRIPTING_GAMEMODEEVENTS_HPP
+#define BURGWAR_CORELIB_SCRIPTING_GAMEMODEEVENTS_HPP
+
+#include <CoreLib/Export.hpp>
+#include <CoreLib/Scripting/EventCombinator.hpp>
+#include <limits> //<FIXME: This is a bug from sol2 v3.2.1 (sol/stack_core.hpp is missing this includes), upgrading may fix this
+#include <sol/sol.hpp>
+#include <cstddef>
+#include <functional>
+#include <optional>
+#include <string_view>
+
+namespace bw
+{
+	enum class GamemodeEvent
+	{
+#ifndef Q_MOC_RUN
+#define BURGWAR_EVENT(X) X,
+#define BURGWAR_EVENT_LAST(X) X, Max = X
+
+#include <CoreLib/Scripting/GamemodeEventList.hpp>
+#endif
+	};
+
+	template<GamemodeEvent E>
+	struct GamemodeEventData
+	{
+		using ResultType = void;
+
+		static constexpr bool FatalError = false;
+	};
+
+	template<>
+	struct GamemodeEventData<GamemodeEvent::Init>
+	{
+		using ResultType = void;
+
+		static constexpr bool FatalError = true;
+	};
+
+	using GamemodePlayerChatReturn = std::pair<sol::optional<bool>, sol::optional<std::string>>;
+
+	struct ChatCombinator
+	{
+		GamemodePlayerChatReturn operator()(GamemodePlayerChatReturn previousValue, GamemodePlayerChatReturn newValue)
+		{
+			if (previousValue.first.has_value())
+				return previousValue;
+
+			return newValue;
+		}
+	};
+
+	template<>
+	struct GamemodeEventData<GamemodeEvent::PlayerChat>
+	{
+		using ResultType = GamemodePlayerChatReturn;
+
+		static constexpr bool FatalError = false;
+		static constexpr EventCombinator<GamemodePlayerChatReturn, ChatCombinator> Combinator = {};
+	};
+
+	constexpr std::size_t GamemodeEventCount = static_cast<std::size_t>(GamemodeEvent::Max) + 1;
+
+	constexpr bool HasReturnValue(GamemodeEvent event);
+	BURGWAR_CORELIB_API std::optional<GamemodeEvent> RetrieveGamemodeEvent(const std::string_view& eventName);
+	BURGWAR_CORELIB_API std::string_view ToString(GamemodeEvent event);
+}
+
+#include <CoreLib/Scripting/GamemodeEvents.inl>
+
+#endif
